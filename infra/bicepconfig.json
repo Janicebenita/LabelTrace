@@ -1,0 +1,3 @@
+{
+  "analyzers": {"core": {"enabled": true, "rules": {"no-unused-params": {"level": "error"}, "no-hardcoded-env-urls": {"level": "error"}}}}
+}

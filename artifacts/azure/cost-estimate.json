@@ -1,0 +1,111 @@
+{
+  "pricing_access_date": "2026-10-22",
+  "proposed_region": "eastus2",
+  "currency": "USD",
+  "hours_per_month": 730,
+  "basis": "Microsoft Azure Retail Prices API consumption rates. No subscription, student-credit, reservation or free-tier assumptions.",
+  "line_items": [
+    {
+      "resource": "Static Web Apps Standard",
+      "quantity": 1,
+      "unit_price_usd": 9.0,
+      "unit": "1/Month",
+      "monthly_usd": 9.0,
+      "meter_id": "3503f67c-c189-5894-a06b-3ab051dc64f8",
+      "pricing_region": "eastus2",
+      "product": "Static Web Apps",
+      "meter": "Standard App",
+      "effective_start_date": "2021-05-01T00:00:00Z"
+    },
+    {
+      "resource": "App Service Linux B1",
+      "quantity": 730,
+      "unit_price_usd": 0.017,
+      "unit": "1 Hour",
+      "monthly_usd": 12.41,
+      "meter_id": "5c8c5208-4a7c-4d65-986d-5c276880540a",
+      "pricing_region": "eastus2",
+      "product": "Azure App Service Basic Plan - Linux",
+      "meter": "B1",
+      "effective_start_date": "2019-06-01T00:00:00Z"
+    },
+    {
+      "resource": "PostgreSQL B1ms compute",
+      "quantity": 730,
+      "unit_price_usd": 0.017,
+      "unit": "1 Hour",
+      "monthly_usd": 12.41,
+      "meter_id": "1550a19c-e867-57ad-91d4-59559908c16f",
+      "pricing_region": "eastus2",
+      "product": "Azure Database for PostgreSQL Flexible Server Burstable BS Series Compute",
+      "meter": "B1MS",
+      "effective_start_date": "2021-12-01T00:00:00Z"
+    },
+    {
+      "resource": "PostgreSQL 32 GB storage",
+      "quantity": 32,
+      "unit_price_usd": 0.115,
+      "unit": "1 GB/Month",
+      "monthly_usd": 3.68,
+      "meter_id": "ad50239a-df4f-5c24-8955-066731709372",
+      "pricing_region": "eastus2",
+      "product": "Azure Database for PostgreSQL Flex Server Storage",
+      "meter": "Storage Data Stored",
+      "effective_start_date": "2021-06-01T00:00:00Z"
+    },
+    {
+      "resource": "Blob 5 GB Hot LRS",
+      "quantity": 5,
+      "unit_price_usd": 0.0184,
+      "unit": "1 GB/Month",
+      "monthly_usd": 0.092,
+      "meter_id": "10b97fb2-5db4-4ad2-a4e0-69b858d6b52d",
+      "pricing_region": "eastus2",
+      "product": "General Block Blob v2",
+      "meter": "Hot LRS Data Stored",
+      "effective_start_date": "2017-02-03T00:00:00Z"
+    },
+    {
+      "resource": "One Blob private endpoint",
+      "quantity": 730,
+      "unit_price_usd": 0.01,
+      "unit": "1 Hour",
+      "monthly_usd": 7.3,
+      "meter_id": "e6ab7238-e433-4fe0-a2b2-2b2564df2cdb",
+      "pricing_region": "Global",
+      "product": "Virtual Network Private Link",
+      "meter": "Standard Private Endpoint",
+      "effective_start_date": "2020-02-01T00:00:00Z"
+    },
+    {
+      "resource": "Two private DNS zones",
+      "quantity": 2,
+      "unit_price_usd": 0.5,
+      "unit": "1",
+      "monthly_usd": 1.0,
+      "meter_id": "0b608a26-f611-4232-8192-ce81b6b57194",
+      "pricing_region": "",
+      "product": "Azure DNS",
+      "meter": "Private Zone",
+      "effective_start_date": "2019-12-01T00:00:00Z"
+    }
+  ],
+  "estimated_base_monthly_usd": 45.89,
+  "recommended_planning_budget_usd": [
+    50,
+    60
+  ],
+  "excluded": [
+    "Taxes",
+    "FX conversion",
+    "Storage/DNS/Blob operation and transfer overages",
+    "Backup growth/soft-deleted versions above assumptions",
+    "AI requests and model deployments",
+    "Paid operator networking/VM/VPN/Bastion/self-hosted runner",
+    "GitHub paid features or overage",
+    "HA, monitoring add-ons, custom domains and enterprise support"
+  ],
+  "source_url": "https://prices.azure.com/api/retail/prices",
+  "provisioned": false,
+  "notice": "Planning estimate, not a quote or spending cap. Confirm region/SKU/quota and tenant-specific prices before authorization."
+}

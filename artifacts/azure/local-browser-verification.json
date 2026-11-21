@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-22",
+  "health": {
+    "status": "ok",
+    "database": "sqlite",
+    "storage": "local",
+    "synthetic": true
+  },
+  "source_uploaded": "SYNTHETIC-adult-spec-azure-smoke-v4.pdf",
+  "revision": "adult.box r6",
+  "release_id": "ed8e67417d424784a582ea75829af27b",
+  "uploaded_pdf_via_browser": true,
+  "human_roles_simulated_in_separate_accounts": true,
+  "evidence_download_via_browser": true,
+  "download_matches_backend": true,
+  "all_manifest_hashes_match": true,
+  "azure_resources_created": false,
+  "live_azure_connectivity_verified": false
+}

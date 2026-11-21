@@ -1,0 +1,50 @@
+name: Azure infrastructure (manual, approval gated)
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: what-if never creates resources; apply requires prior written cost approval
+        type: choice
+        options: [what-if, apply]
+        default: what-if
+      confirm_cost_approval:
+        description: Resource plan, region and recurring cost have been explicitly approved
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  infrastructure:
+    if: inputs.operation == 'what-if' || (inputs.confirm_cost_approval && vars.AZURE_COST_APPROVED == 'true')
+    environment: azure-poc
+    runs-on: ubuntu-latest
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
+      ENTRA_ADMIN_ID: ${{ vars.ENTRA_DB_ADMIN_OBJECT_ID }}
+      ENTRA_ADMIN_NAME: ${{ vars.ENTRA_DB_ADMIN_NAME }}
+      LABELTRACE_PREFIX: ${{ vars.LABELTRACE_PREFIX || 'labeltrace' }}
+      OPERATION: ${{ inputs.operation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Validate required nonsecret deployment parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_RESOURCE_GROUP" && test -n "$ENTRA_ADMIN_ID" && test -n "$ENTRA_ADMIN_NAME"
+          az bicep build --file infra/main.bicep
+      - name: Preview or explicitly approved provisioning
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$OPERATION" = "what-if" ]; then
+            az deployment group what-if --resource-group "$AZURE_RESOURCE_GROUP" --template-file infra/main.bicep --parameters location="$AZURE_LOCATION" prefix="$LABELTRACE_PREFIX" entraAdminObjectId="$ENTRA_ADMIN_ID" entraAdminName="$ENTRA_ADMIN_NAME" entraAdminType=Group
+          else
+            az deployment group create --resource-group "$AZURE_RESOURCE_GROUP" --name labeltrace --template-file infra/main.bicep --parameters location="$AZURE_LOCATION" prefix="$LABELTRACE_PREFIX" entraAdminObjectId="$ENTRA_ADMIN_ID" entraAdminName="$ENTRA_ADMIN_NAME" entraAdminType=Group
+          fi

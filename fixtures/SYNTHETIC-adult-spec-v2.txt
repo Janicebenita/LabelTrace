@@ -1,0 +1,11 @@
+SYNTHETIC DEMONSTRATION ONLY - NOT FOR MANUFACTURING
+Product specification: adult / Version 2
+product_name: Synthetic Adult Tongue Depressor 150 mm
+manufacturer_name: Synthetic Example Devices LLC
+manufacturer_address: 200 Research Way, Boston, MA 02110
+product_identifier: SYN-TD-A150
+material: Nonsterile birch wood
+box.pack_identifier: SYN-A150-B100
+carton.pack_identifier: SYN-A150-C1000
+box.quantity: 100 units
+carton.quantity: 1000 units

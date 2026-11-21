@@ -1,0 +1,7 @@
+.venv
+frontend/node_modules
+data
+.test-tmp
+.env
+artifacts
+__pycache__

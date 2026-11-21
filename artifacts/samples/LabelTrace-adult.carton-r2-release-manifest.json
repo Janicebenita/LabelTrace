@@ -1,0 +1,116 @@
+{
+  "release_reference": "04b762567a824dcea9fccc74f9007db9",
+  "released_at": "2026-10-22T16:58:29.018711+00:00",
+  "released_by": "fa479ae20a584e65b557e94c3d17cf20",
+  "revision_id": "340ef692ddcb4580a22c836b8951041e",
+  "label_key": "adult.carton",
+  "revision_version": 2,
+  "artifact_sha256": "c0b15b34ae8510d001560a4ec233b529bab79e70ad2a7c3fc7ca5d3b69ebe5f7",
+  "dependency_snapshot": {
+    "facts": {
+      "adult.product_name": "255db84914f2493abe39bf005b4f0643",
+      "adult.manufacturer_name": "7603d952aba646868188930ea004f780",
+      "adult.manufacturer_address": "9134d38e8d75437bbacea0f5d9603095",
+      "adult.product_identifier": "0041d467cb48425fa2a0be4a05cab799",
+      "adult.carton.pack_identifier": "cffdcdca345743b3aeba103fc770b510",
+      "adult.carton.quantity": "a2a01b3553c3433dbc87803a72c3d17a",
+      "adult.material": "84448a9f6e7c4de481fc4fd77aa0f6af"
+    },
+    "template_id": "c2e954d3ea3e4528bdc19d15465b9f62",
+    "rules_id": "dc08d2aec51c4b53a59904f306d36701",
+    "dependency_map": [
+      {
+        "field": "product_name",
+        "fact_key": "adult.product_name",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "manufacturer_name",
+        "fact_key": "adult.manufacturer_name",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "manufacturer_address",
+        "fact_key": "adult.manufacturer_address",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "product_identifier",
+        "fact_key": "adult.product_identifier",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "pack_identifier",
+        "fact_key": "adult.carton.pack_identifier",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "quantity",
+        "fact_key": "adult.carton.quantity",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      },
+      {
+        "field": "material",
+        "fact_key": "adult.material",
+        "condition": {
+          "product": "adult",
+          "level": "carton",
+          "market": "US",
+          "language": "en"
+        }
+      }
+    ]
+  },
+  "validation_id": "a3b949c923b34a4f992230e659b9290f",
+  "approval_id": "9531b382c6434ff683bfd5c6fde515c3",
+  "file_hashes": {
+    "label.pdf": "c0b15b34ae8510d001560a4ec233b529bab79e70ad2a7c3fc7ca5d3b69ebe5f7",
+    "revision.json": "a9163dcc5fa159ed556d833fc0cdf8a2adcdde365eebf4403240908b4202612a",
+    "facts.json": "4ab2470810a84f58fdfad1e439bbc88b8ae6e8a62a7e314104495d7c59070cf0",
+    "candidate-facts.json": "4bb44ac57ef413c6dc9937a6b85c2cab9aa586bd1ce7b4f346ea39b379942adb",
+    "change-history.json": "61f114bd6df156d2c567f5d16deb123785de5920518e62b0d4a2a5da28d20864",
+    "sources.json": "39d23fa8e7c9d3f2deffba345932700cd3d21b4831a9ffde8f27a5a13c3cbb8a",
+    "template.json": "96a752d5d1989aed550b531c42a46efd6e9126c9827cc0348b7700dca25459e8",
+    "rules.json": "a1a9fb2970b46f01724d36a6b6ae24c2ab516fa4f523f5777408862363feca0c",
+    "validation.json": "3f76aab3fd7061d0f7e7334342760956c097f6b46464e7648b723cd65bd332a3",
+    "approval-history.json": "46ab2553ecbaa9c5822fca27ce13f6d8bfddd33cb5f7ef9b135feb1d700dfffc",
+    "review-decisions.json": "51b1971cf516d6175f11a6931fe61ecc18aeaeab6570849739b9a4ca10fa2071",
+    "audit.json": "42139c4e637590d8fe70bdb5fb96260a3d667e770ec355d260c83ef3eeaf3ef4",
+    "change.json": "02362ea38634f05482be7e3b8ee50b9e6b491830fbbe752f7c04562b0ec88cd2",
+    "original-sources/c597b5b5326d4334a3cd27e1648b2dd4.txt": "a14dd1ecceceaaf91f0fbab6f467fbfb9f152388c66d29f36e628e979b67eb2d",
+    "original-sources/de790afc354c404bb989a68fef48b330.pdf": "ffd8d615a2fc46983ac4b4306fc7e4dced9561062ac5ed064ccb8e1a126721fb",
+    "original-sources/323996c6ebd24a11b62c04006ed7b99b.pdf": "5cb89e296c10c1baa051ea8dcf5c97d15559b5fcb4b117acce67debfb61bd6b3"
+  },
+  "synthetic": true,
+  "notice": "Demonstration only. SHA-256 hashes are integrity checks, not electronic signatures. Manufacturing handoff is simulated."
+}

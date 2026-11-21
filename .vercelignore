@@ -1,0 +1,16 @@
+.venv
+**/.venv
+node_modules
+**/node_modules
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.test-tmp
+.round2-build
+data
+output
+tmp
+artifacts
+**/tests
+docs
+fixtures

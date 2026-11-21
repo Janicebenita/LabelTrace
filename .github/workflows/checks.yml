@@ -1,0 +1,41 @@
+name: LabelTrace checks
+on: [push, pull_request]
+jobs:
+  sqlite-and-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: pip install -r backend/requirements-lock.txt
+      - run: python -m pytest -q --junitxml=artifacts/backend-test-results.xml
+      - run: npm ci && npm test && npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: verification-results, path: artifacts/}
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env: {POSTGRES_DB: labeltrace, POSTGRES_USER: labeltrace, POSTGRES_PASSWORD: ci-only-not-production}
+        ports: ['5432:5432']
+        options: --health-cmd 'pg_isready -U labeltrace' --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://labeltrace:ci-only-not-production@127.0.0.1:5432/labeltrace
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://labeltrace:ci-only-not-production@127.0.0.1:5432/labeltrace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install -r backend/requirements-lock.txt
+      - run: python manage.py init
+      - run: python -c "from backend import db; from backend.seed import BASE; from sqlalchemy import select; s=db.Session(); assert len(db.rows(s,db.Label)) == 4"
+      - run: python -m pytest -q --junitxml=artifacts/postgres-test-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: postgres-verification-results, path: artifacts/}

@@ -1,0 +1,51 @@
+{
+  "verified_date": "2026-10-22",
+  "database": "sqlite",
+  "source_documents": 4,
+  "approved_fact_versions": 20,
+  "change_requests": 2,
+  "revisions": 9,
+  "approvals": 4,
+  "releases": 2,
+  "current_labels": [
+    {
+      "label": "pediatric.box",
+      "revision": 1,
+      "state": "Approved"
+    },
+    {
+      "label": "pediatric.carton",
+      "revision": 1,
+      "state": "Review Ready"
+    },
+    {
+      "label": "adult.box",
+      "revision": 5,
+      "state": "Released"
+    },
+    {
+      "label": "adult.carton",
+      "revision": 2,
+      "state": "Released"
+    }
+  ],
+  "blocked_attempts": [
+    {
+      "revision_id": "f9771e9dc9774a74acb8cf04d9ec3442",
+      "reasons": [
+        "Successful validation is required",
+        "Approval of this exact artifact is required"
+      ]
+    },
+    {
+      "revision_id": "38270c3690a24de791241bcc1093a233",
+      "reasons": [
+        "Fact adult.manufacturer_address has a newer approved version"
+      ]
+    }
+  ],
+  "browser_downloads_verified": true,
+  "artifact_manifest_hashes_verified": true,
+  "browser_console_errors_observed": 0,
+  "postgres_verified": false
+}

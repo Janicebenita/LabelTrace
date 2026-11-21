@@ -1,0 +1,18 @@
+{
+  "description": "Human-authored oracle; not derived by traversing runtime dependencies.",
+  "change": {"fact_key": "adult.manufacturer_address", "from": "100 Research Way, Boston, MA 02110", "to": "200 Research Way, Boston, MA 02110"},
+  "affected": ["adult.box", "adult.carton"],
+  "unaffected": ["pediatric.box", "pediatric.carton"],
+  "changed_fields": ["manufacturer_address"],
+  "defects": {
+    "barcode": ["INT-BARCODE-DECODE"],
+    "missing": ["US-801.1-SUBSET", "INT-ARTWORK-TEXT"],
+    "identifier": ["INT-IDENTIFIER", "INT-ARTWORK-TEXT"],
+    "text": ["INT-APPLICABILITY", "INT-ARTWORK-TEXT"],
+    "overflow": ["LAYOUT-BOUNDS", "INT-CONTENT"],
+    "applicability": ["INT-APPLICABILITY", "INT-ARTWORK-TEXT"]
+  },
+  "clean_expected_blocking_findings": 0,
+  "ambiguity": "Repeated manufacturer_address lines with different values must block candidate approval.",
+  "failure": "An image-only PDF must fail extraction explicitly; missing evidence must block change proposal."
+}

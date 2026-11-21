@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="920" viewBox="0 0 1500 920" role="img" aria-labelledby="title desc">
+  <title id="title">LabelTrace full-stack architecture</title>
+  <desc id="desc">The React and TypeScript browser calls a FastAPI control plane. FastAPI enforces role permissions, versioned workflow and release gates, using SQLAlchemy with PostgreSQL or local SQLite and private cloud or local artifact storage. Optional Azure AI adapters provide reviewed suggestions only.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5fbff"/><stop offset="1" stop-color="#edf3fb"/></linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#21c8ae"/><stop offset="1" stop-color="#2f9bd5"/></linearGradient>
+    <linearGradient id="api" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6b67ef"/><stop offset="1" stop-color="#8a60c7"/></linearGradient>
+    <linearGradient id="db" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffbd63"/><stop offset="1" stop-color="#f18c59"/></linearGradient>
+    <linearGradient id="blob" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#51b8e9"/><stop offset="1" stop-color="#4975d6"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#2b4566" flood-opacity=".12"/></filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 10 5 0 10z" fill="#72869f"/></marker>
+    <marker id="arrowOpt" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 10 5 0 10z" fill="#a38ad3"/></marker>
+  </defs>
+  <rect width="1500" height="920" rx="28" fill="url(#bg)"/>
+  <path d="M0 155H1500" stroke="#dbe5f0" stroke-width="2"/>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <text x="70" y="75" fill="#12283e" font-size="34" font-weight="750">LabelTrace architecture</text>
+    <text x="72" y="112" fill="#5a7087" font-size="17">A conventional full-stack control plane with explicit evidence and release boundaries</text>
+    <rect x="1140" y="50" width="285" height="39" rx="19.5" fill="#e4f4f0" stroke="#c4e8df"/>
+    <circle cx="1163" cy="69.5" r="5" fill="#0a9a84"/><text x="1178" y="75" fill="#28756f" font-size="13" font-weight="700" letter-spacing="1">SERVER IS AUTHORITATIVE</text>
+
+    <g filter="url(#shadow)">
+      <rect x="70" y="205" width="330" height="265" rx="22" fill="#fff" stroke="#d8e3ee" stroke-width="2"/>
+      <rect x="70" y="205" width="330" height="71" rx="22" fill="url(#front)"/><path d="M70 254h330v22H70z" fill="url(#front)"/>
+      <circle cx="111" cy="240" r="19" fill="#fff" fill-opacity=".2"/><path d="M103 247v-15a4 4 0 0 1 4-4h8m-10 4 8 8 12-13m-20 16v-11" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="143" y="237" fill="#fff" font-size="21" font-weight="700">Browser workspace</text>
+      <text x="99" y="312" fill="#19354c" font-size="16" font-weight="700">React · TypeScript · Vite</text>
+      <text x="99" y="345" fill="#5d7186" font-size="14">• Source and candidate review</text>
+      <text x="99" y="372" fill="#5d7186" font-size="14">• Impact and artwork comparison</text>
+      <text x="99" y="399" fill="#5d7186" font-size="14">• Validation, approvals, release</text>
+      <rect x="99" y="423" width="180" height="25" rx="12.5" fill="#e6f8f4"/><text x="112" y="440" fill="#138a7b" font-size="12" font-weight="700">NO AUTHORITATIVE CLIENT STATE</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="560" y="190" width="440" height="520" rx="24" fill="#fff" stroke="#d9def1" stroke-width="2"/>
+      <rect x="560" y="190" width="440" height="76" rx="24" fill="url(#api)"/><path d="M560 240h440v26H560z" fill="url(#api)"/>
+      <circle cx="604" cy="228" r="20" fill="#fff" fill-opacity=".2"/><path d="m596 220 16 16m0-16-16 16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+      <text x="640" y="235" fill="#fff" font-size="23" font-weight="700">FastAPI control plane</text>
+      <text x="594" y="302" fill="#6a5eb5" font-size="13" font-weight="700" letter-spacing="1.4">AUTHORIZATION + WORKFLOW</text>
+      <g font-size="14" fill="#334d66">
+        <rect x="592" y="321" width="376" height="43" rx="10" fill="#f5f3ff"/><circle cx="612" cy="342" r="6" fill="#8b75e8"/><text x="628" y="347">Role permissions and separation of duties</text>
+        <rect x="592" y="374" width="376" height="43" rx="10" fill="#f5f3ff"/><circle cx="612" cy="395" r="6" fill="#8b75e8"/><text x="628" y="400">Versioned facts and dependency assessment</text>
+        <rect x="592" y="427" width="376" height="43" rx="10" fill="#f5f3ff"/><circle cx="612" cy="448" r="6" fill="#8b75e8"/><text x="628" y="453">Immutable PDF generation and validation</text>
+        <rect x="592" y="480" width="376" height="43" rx="10" fill="#fff1e9"/><circle cx="612" cy="501" r="6" fill="#f49a65"/><text x="628" y="506">Approval freshness and release-time gate</text>
+        <rect x="592" y="533" width="376" height="43" rx="10" fill="#eaf7fc"/><circle cx="612" cy="554" r="6" fill="#48a9d7"/><text x="628" y="559">Audit history and evidence ZIP export</text>
+      </g>
+      <rect x="594" y="617" width="372" height="57" rx="12" fill="#f7f8fc" stroke="#e5e7f0"/><text x="612" y="640" fill="#5d687f" font-size="12" font-weight="700" letter-spacing=".8">PERSISTENCE</text><text x="612" y="660" fill="#334d66" font-size="14">SQLAlchemy · Alembic · storage adapter</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="1165" y="205" width="265" height="213" rx="22" fill="#fff" stroke="#f1ddcb" stroke-width="2"/>
+      <rect x="1165" y="205" width="265" height="59" rx="22" fill="url(#db)"/><path d="M1165 242h265v22h-265z" fill="url(#db)"/><text x="1194" y="242" fill="#fff" font-size="19" font-weight="700">Relational database</text>
+      <text x="1195" y="303" fill="#31475a" font-size="14" font-weight="700">Hosted</text><text x="1195" y="326" fill="#617487" font-size="13">PostgreSQL</text>
+      <text x="1195" y="360" fill="#31475a" font-size="14" font-weight="700">Direct local mode</text><text x="1195" y="383" fill="#617487" font-size="13">Persistent SQLite fallback</text>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="1165" y="468" width="265" height="242" rx="22" fill="#fff" stroke="#d4e1f5" stroke-width="2"/>
+      <rect x="1165" y="468" width="265" height="59" rx="22" fill="url(#blob)"/><path d="M1165 505h265v22h-265z" fill="url(#blob)"/><text x="1194" y="505" fill="#fff" font-size="19" font-weight="700">Private artifacts</text>
+      <text x="1195" y="566" fill="#31475a" font-size="14" font-weight="700">Hosted adapters</text><text x="1195" y="589" fill="#617487" font-size="13">Azure Blob · Vercel Blob</text>
+      <text x="1195" y="624" fill="#31475a" font-size="14" font-weight="700">Direct local mode</text><text x="1195" y="647" fill="#617487" font-size="13">Filesystem object store</text>
+      <text x="1195" y="678" fill="#617487" font-size="11">Sources · PDFs · release evidence</text>
+    </g>
+
+    <path d="M400 336H537" stroke="#72869f" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="416" y="298" width="113" height="26" rx="13" fill="#edf2f7"/><text x="472" y="316" text-anchor="middle" fill="#526b83" font-size="12" font-weight="700">HTTPS · /api</text>
+    <path d="M1000 334H1144" stroke="#72869f" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="1010" y="296" width="119" height="26" rx="13" fill="#edf2f7"/><text x="1069" y="314" text-anchor="middle" fill="#526b83" font-size="11" font-weight="700">VERSIONED RECORDS</text>
+    <path d="M1000 572H1144" stroke="#72869f" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="1011" y="534" width="116" height="26" rx="13" fill="#edf2f7"/><text x="1069" y="552" text-anchor="middle" fill="#526b83" font-size="11" font-weight="700">PRIVATE BYTES</text>
+
+    <g>
+      <rect x="70" y="565" width="330" height="145" rx="20" fill="#fcfaff" stroke="#cfbee9" stroke-width="2" stroke-dasharray="8 7"/>
+      <circle cx="108" cy="605" r="17" fill="#eadffc"/><path d="M101 604h14m-7-7v14" stroke="#7959ae" stroke-width="2.3" stroke-linecap="round"/>
+      <text x="140" y="611" fill="#63468e" font-size="17" font-weight="700">Optional AI adapters</text>
+      <text x="99" y="649" fill="#665a78" font-size="13">Azure OpenAI · Document Intelligence</text>
+      <text x="99" y="675" fill="#665a78" font-size="13">Candidate extraction / explanations only</text>
+      <text x="99" y="696" fill="#865d59" font-size="11" font-weight="700">NEVER APPROVES OR WRITES AUTHORITATIVE LABEL FACTS</text>
+    </g>
+    <path d="M400 618C465 618 487 650 537 650" fill="none" stroke="#a38ad3" stroke-width="2.5" stroke-dasharray="7 7" marker-end="url(#arrowOpt)"/>
+    <rect x="437" y="666" width="100" height="23" rx="11.5" fill="#f1eafb"/><text x="487" y="682" text-anchor="middle" fill="#7959ae" font-size="10" font-weight="700">ADVISORY ONLY</text>
+
+    <rect x="70" y="775" width="1360" height="82" rx="18" fill="#112840"/>
+    <text x="104" y="810" fill="#75e8d2" font-size="13" font-weight="700" letter-spacing="1.3">RELEASE CONTROL</text>
+    <text x="104" y="837" fill="#eef6ff" font-size="16" font-weight="600">Current dependencies</text>
+    <text x="300" y="837" fill="#9bb0c5" font-size="18">+</text>
+    <text x="332" y="837" fill="#eef6ff" font-size="16" font-weight="600">intact artifact hash</text>
+    <text x="535" y="837" fill="#9bb0c5" font-size="18">+</text>
+    <text x="568" y="837" fill="#eef6ff" font-size="16" font-weight="600">passed validation</text>
+    <text x="757" y="837" fill="#9bb0c5" font-size="18">+</text>
+    <text x="790" y="837" fill="#eef6ff" font-size="16" font-weight="600">approval for that exact revision</text>
+    <path d="M1102 817h44" stroke="#5fe0c8" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="1174" y="794" width="213" height="43" rx="12" fill="#1d9a89"/><text x="1280" y="821" text-anchor="middle" fill="#fff" font-size="15" font-weight="750">ELIGIBLE TO RELEASE</text>
+    <text x="70" y="892" fill="#667b91" font-size="12">Prototype architecture · simulated PLM / manufacturing handoffs · no production or regulatory qualification implied</text>
+  </g>
+</svg>

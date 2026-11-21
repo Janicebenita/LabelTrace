@@ -1,0 +1,13 @@
+
+> labeltrace-workspace@0.1.0 build
+> tsc -b && vite build
+
+vite v6.4.5 building for production...
+transforming...
+✓ 1629 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.43 kB │ gzip:  0.31 kB
+dist/assets/index-BEjlJgg_.css   22.56 kB │ gzip:  6.07 kB
+dist/assets/index-SWZR2nOH.js   234.86 kB │ gzip: 71.85 kB
+✓ built in 4.12s

@@ -1,0 +1,531 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "4863193339017113934"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Proposed paid-resource region. Confirm availability, billing and data residency before deployment."
+      }
+    },
+    "prefix": {
+      "type": "string",
+      "defaultValue": "labeltrace",
+      "minLength": 3,
+      "maxLength": 11
+    },
+    "entraAdminObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing Microsoft Entra PostgreSQL administrator object ID; not an application password."
+      }
+    },
+    "entraAdminName": {
+      "type": "string"
+    },
+    "entraAdminType": {
+      "type": "string",
+      "defaultValue": "Group",
+      "allowedValues": [
+        "User",
+        "Group",
+        "ServicePrincipal"
+      ]
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "poc",
+      "metadata": {
+        "description": "No Azure AI resources are provisioned by this template. AI stays deterministic."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id, parameters('prefix'))]",
+    "apiName": "[format('{0}-api-{1}', parameters('prefix'), variables('suffix'))]",
+    "storageName": "[format('{0}{1}', parameters('prefix'), variables('suffix'))]",
+    "postgresName": "[format('{0}-pg-{1}', parameters('prefix'), variables('suffix'))]",
+    "containerName": "labeltrace-private",
+    "tags": {
+      "project": "LabelTrace",
+      "environment": "[parameters('environmentName')]",
+      "data": "synthetic"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}-vnet', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.34.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "app-service",
+            "properties": {
+              "addressPrefix": "10.34.1.0/26",
+              "delegations": [
+                {
+                  "name": "web",
+                  "properties": {
+                    "serviceName": "Microsoft.Web/serverFarms"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "postgres",
+            "properties": {
+              "addressPrefix": "10.34.2.0/27",
+              "delegations": [
+                {
+                  "name": "postgres",
+                  "properties": {
+                    "serviceName": "Microsoft.DBforPostgreSQL/flexibleServers"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "private-endpoints",
+            "properties": {
+              "addressPrefix": "10.34.3.0/27",
+              "privateEndpointNetworkPolicies": "Disabled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('privatelink.blob.{0}', environment().suffixes.storage)]",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('privatelink.blob.{0}', environment().suffixes.storage), format('{0}-blob-link', parameters('prefix')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}.private.postgres.database.azure.com', parameters('prefix'))]",
+      "location": "global",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2024-06-01",
+      "name": "[format('{0}/{1}', format('{0}.private.postgres.database.azure.com', parameters('prefix')), format('{0}-pg-link', parameters('prefix')))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', format('{0}.private.postgres.database.azure.com', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "supportsHttpsTrafficOnly": true,
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": false,
+        "publicNetworkAccess": "Disabled",
+        "networkAcls": {
+          "defaultAction": "Deny",
+          "bypass": "None"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('storageName'), 'default')]",
+      "properties": {
+        "isVersioningEnabled": true,
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        },
+        "containerDeleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageName'), 'default', variables('containerName'))]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}-blob-pe', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "subnet": {
+          "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix'))), '2024-05-01').subnets[2].id]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "blob",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]",
+              "groupIds": [
+                "blob"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', format('{0}-blob-pe', parameters('prefix')), 'default')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "blob",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+        "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-blob-pe', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "apiVersion": "2024-08-01",
+      "name": "[variables('postgresName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard_B1ms",
+        "tier": "Burstable"
+      },
+      "properties": {
+        "version": "17",
+        "authConfig": {
+          "activeDirectoryAuth": "Enabled",
+          "passwordAuth": "Disabled",
+          "tenantId": "[tenant().tenantId]"
+        },
+        "storage": {
+          "storageSizeGB": 32,
+          "type": "Premium_LRS",
+          "autoGrow": "Enabled"
+        },
+        "backup": {
+          "backupRetentionDays": 7,
+          "geoRedundantBackup": "Disabled"
+        },
+        "highAvailability": {
+          "mode": "Disabled"
+        },
+        "network": {
+          "delegatedSubnetResourceId": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix'))), '2024-05-01').subnets[1].id]",
+          "privateDnsZoneArmResourceId": "[resourceId('Microsoft.Network/privateDnsZones', format('{0}.private.postgres.database.azure.com', parameters('prefix')))]",
+          "publicNetworkAccess": "Disabled"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones', format('{0}.private.postgres.database.azure.com', parameters('prefix')))]",
+        "[resourceId('Microsoft.Network/privateDnsZones/virtualNetworkLinks', format('{0}.private.postgres.database.azure.com', parameters('prefix')), format('{0}-pg-link', parameters('prefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', variables('postgresName'), parameters('entraAdminObjectId'))]",
+      "properties": {
+        "principalName": "[parameters('entraAdminName')]",
+        "principalType": "[parameters('entraAdminType')]",
+        "tenantId": "[tenant().tenantId]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+      "apiVersion": "2024-08-01",
+      "name": "[format('{0}/{1}', variables('postgresName'), 'labeltrace')]",
+      "properties": {
+        "charset": "UTF8",
+        "collation": "en_US.utf8"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/staticSites",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}-web-{1}', parameters('prefix'), variables('suffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "provider": "Custom",
+        "stagingEnvironmentPolicy": "Disabled",
+        "allowConfigFileUpdates": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}-linux-plan', parameters('prefix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "linux",
+      "sku": {
+        "name": "B1",
+        "tier": "Basic",
+        "capacity": 1
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2024-11-01",
+      "name": "[variables('apiName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-linux-plan', parameters('prefix')))]",
+        "httpsOnly": true,
+        "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix'))), '2024-05-01').subnets[0].id]",
+        "siteConfig": {
+          "linuxFxVersion": "PYTHON|3.12",
+          "appCommandLine": "bash scripts/azure-start.sh",
+          "alwaysOn": true,
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "scmMinTlsVersion": "1.2",
+          "healthCheckPath": "/api/health/ready",
+          "appSettings": [
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "true"
+            },
+            {
+              "name": "APP_ENV",
+              "value": "production"
+            },
+            {
+              "name": "SEED_DEMO",
+              "value": "0"
+            },
+            {
+              "name": "DATABASE_AUTH",
+              "value": "azure_identity"
+            },
+            {
+              "name": "PGHOST",
+              "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresName')), '2024-08-01').fullyQualifiedDomainName]"
+            },
+            {
+              "name": "PGDATABASE",
+              "value": "labeltrace"
+            },
+            {
+              "name": "PGUSER",
+              "value": "[variables('apiName')]"
+            },
+            {
+              "name": "PGSSLROOTCERT",
+              "value": "system"
+            },
+            {
+              "name": "STORAGE_BACKEND",
+              "value": "azure"
+            },
+            {
+              "name": "AZURE_STORAGE_ACCOUNT_URL",
+              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2023-05-01').primaryEndpoints.blob]"
+            },
+            {
+              "name": "AZURE_STORAGE_CONTAINER",
+              "value": "[variables('containerName')]"
+            },
+            {
+              "name": "AZURE_AUTH_MODE",
+              "value": "managed_identity"
+            },
+            {
+              "name": "AI_MODE",
+              "value": "deterministic"
+            },
+            {
+              "name": "DOCUMENT_EXTRACTOR",
+              "value": "local"
+            },
+            {
+              "name": "COOKIE_SECURE",
+              "value": "1"
+            },
+            {
+              "name": "ALLOWED_ORIGINS",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/staticSites', format('{0}-web-{1}', parameters('prefix'), variables('suffix'))), '2024-11-01').defaultHostname)]"
+            },
+            {
+              "name": "LABELTRACE_DATA",
+              "value": "/tmp/labeltrace"
+            },
+            {
+              "name": "WEBSITES_CONTAINER_START_TIME_LIMIT",
+              "value": "600"
+            },
+            {
+              "name": "WEBSITE_HEALTHCHECK_MAXPINGFAILURES",
+              "value": "3"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('postgresName'), 'labeltrace')]",
+        "[resourceId('Microsoft.Network/virtualNetworks', format('{0}-vnet', parameters('prefix')))]",
+        "[resourceId('Microsoft.Web/serverfarms', format('{0}-linux-plan', parameters('prefix')))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresName'))]",
+        "[resourceId('Microsoft.Web/staticSites', format('{0}-web-{1}', parameters('prefix'), variables('suffix')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageName'), 'default', variables('containerName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageName'), 'default', variables('containerName')), resourceId('Microsoft.Web/sites', variables('apiName')), 'Storage Blob Data Contributor')]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('apiName')), '2024-11-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('apiName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('storageName'), 'default', variables('containerName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "appServiceName": {
+      "type": "string",
+      "value": "[variables('apiName')]"
+    },
+    "appServiceResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/sites', variables('apiName'))]"
+    },
+    "appServicePrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('apiName')), '2024-11-01', 'full').identity.principalId]"
+    },
+    "staticWebAppName": {
+      "type": "string",
+      "value": "[format('{0}-web-{1}', parameters('prefix'), variables('suffix'))]"
+    },
+    "frontendUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/staticSites', format('{0}-web-{1}', parameters('prefix'), variables('suffix'))), '2024-11-01').defaultHostname)]"
+    },
+    "postgresHost": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresName')), '2024-08-01').fullyQualifiedDomainName]"
+    },
+    "postgresDatabase": {
+      "type": "string",
+      "value": "labeltrace"
+    },
+    "postgresIdentityRole": {
+      "type": "string",
+      "value": "[variables('apiName')]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageName')]"
+    },
+    "artifactContainer": {
+      "type": "string",
+      "value": "[variables('containerName')]"
+    },
+    "nextStep": {
+      "type": "string",
+      "value": "After approved provisioning: Entra SQL role bootstrap, source deployment, SWA backend link, interactive synthetic-user bootstrap, cloud verification."
+    }
+  }
+}

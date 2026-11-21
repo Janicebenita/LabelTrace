@@ -1,0 +1,21 @@
+{
+  "scope": "One human-authored change oracle; four labels; six deterministic defect fixtures. Not a general accuracy or review-time claim.",
+  "database": "sqlite",
+  "impact_precision": 1.0,
+  "impact_recall": 1.0,
+  "missed_affected_variants": 0,
+  "defect_fixture_sensitivity": 1.0,
+  "false_alarms_on_four_clean_baselines": 0,
+  "element_traceability_completeness": 1.0,
+  "validation_ms": [
+    140.67,
+    187.77,
+    179.55,
+    193.1,
+    340.67,
+    264.52
+  ],
+  "scenario_elapsed_ms": 10527.47,
+  "manual_review_time_comparison": "Not measured; requires independent human task study.",
+  "postgres_concurrency": "Not verified in this SQLite run."
+}
