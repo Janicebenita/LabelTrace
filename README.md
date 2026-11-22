@@ -194,8 +194,15 @@ Copy [`.env.example`](.env.example) to `.env` for local overrides. Never commit 
 | `AI_MODE` | `deterministic` | No provider calls; optional Azure OpenAI requires explicit configuration |
 | `DOCUMENT_EXTRACTOR` | `local` | Deterministic text-PDF/text extraction by default |
 | `SEED_DEMO` | `1` locally | Initialize only the synthetic workspace |
+| `AGENT_ENABLED` / `ANTHROPIC_API_KEY` | off | Optional LabelTrace AI chat (server-side only). See [`docs/AI_AGENT.md`](docs/AI_AGENT.md) |
 
 The app rejects unsupported extraction cases such as scanned PDFs when OCR is not configured; it does not invent transcription results. Document text is treated as untrusted input, never as application instructions.
+
+## 🤖 LabelTrace AI (read-only, evidence-grounded)
+
+*Every edit has a source. Every release has proof. Every AI decision has evidence.*
+
+The **AI Intelligence** page adds a Claude-powered analysis agent that calls typed, read-only tools over the real records: release-gate status, validation findings, QR/hash re-verification, approval history, audit events and hypothetical change impact. It can explain and recommend; it cannot approve, regenerate, invalidate or release. Release status is derived from the deterministic gate, every cited item must be real evidence returned by a tool, and API failures fall back to a labelled deterministic report. Setup, architecture, security boundaries, Vercel steps and limitations: [`docs/AI_AGENT.md`](docs/AI_AGENT.md).
 
 ## 🛡️ Integrity, permissions, and automation boundaries
 

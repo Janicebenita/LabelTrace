@@ -208,16 +208,16 @@ def approve_change(db, change, user):
     m.audit(db, "FACT_VERSION_APPROVED", fact.id, user.id, {"fact_key": fact.key, "previous_fact_id": current.id})
     return change
 
-def impact(db, change, user):
-    if change.data["status"] != "Approved":
-        fail("Impact analysis requires an approved change")
-    existing = m.latest(db, m.Impact, change.id)
-    if existing:
-        return existing
+def impact_selection(db, fact_key, path_prefix):
+    """Read-only label applicability selection for one fact key.
+
+    Shared by impact() (persisted, for an approved change) and what_if_impact()
+    (hypothetical, writes nothing) so both always apply identical rules.
+    """
     selection = []
     for label in m.rows(db, m.Label):
         deps = list(db.scalars(select(m.Dependency).where(m.Dependency.label_id == label.id)))
-        matching = [d for d in deps if d.fact_key == change.data["fact_key"]]
+        matching = [d for d in deps if d.fact_key == fact_key]
         valid = [d for d in matching if all(label.data.get(k) == v for k, v in d.condition.items())]
         if valid:
             status, reason = "Affected", "Approved fact is an explicit dependency of this label element"
@@ -226,9 +226,40 @@ def impact(db, change, user):
         elif not deps:
             status, reason = "Needs assessment", "No dependencies configured; cannot prove exclusion"
         else:
-            status, reason = "Unaffected", f"{label.data['product']} label uses its own approved product facts; no dependency on {change.data['fact_key']}"
+            status, reason = "Unaffected", f"{label.data['product']} label uses its own approved product facts; no dependency on {fact_key}"
         selection.append({"label_id": label.id, "label_key": label.key, "status": status, "reason": reason,
-            "elements": [d.field for d in valid], "paths": [f"{change.id} → {d.fact_key} → {label.key}.{d.field}" for d in valid]})
+            "elements": [d.field for d in valid], "paths": [f"{path_prefix} → {d.fact_key} → {label.key}.{d.field}" for d in valid]})
+    return selection
+
+def what_if_impact(db, fact_key):
+    """Hypothetical impact of a new approved version of `fact_key`. Read-only: no rows are written.
+
+    A revision whose dependency snapshot contains the fact key becomes stale as soon as a newer
+    approved fact version exists (see freshness()), so that is reported deterministically here.
+    """
+    selection = impact_selection(db, fact_key, "hypothetical change to " + fact_key)
+    downstream = []
+    for item in selection:
+        rev = latest_revision(db, item["label_id"])
+        entry = {"label_id": item["label_id"], "label_key": item["label_key"], "status": item["status"],
+                 "revision_id": rev.id if rev else None, "revision_version": rev.version if rev else None}
+        if rev:
+            released = m.latest(db, m.Release, rev.id)
+            approval = m.latest(db, m.Approval, rev.id)
+            in_snapshot = fact_key in rev.data["snapshot"]["facts"]
+            entry.update({"state": status(db, rev)["state"], "approval_id": approval.id if approval else None,
+                          "release_id": released.id if released else None, "snapshot_includes_fact": in_snapshot,
+                          "would_become_stale": in_snapshot})
+        downstream.append(entry)
+    return {"fact_key": fact_key, "labels": selection, "downstream": downstream}
+
+def impact(db, change, user):
+    if change.data["status"] != "Approved":
+        fail("Impact analysis requires an approved change")
+    existing = m.latest(db, m.Impact, change.id)
+    if existing:
+        return existing
+    selection = impact_selection(db, change.data["fact_key"], change.id)
     result = m.add(db, m.Impact, change.id, {"change_id": change.id, "fact_id": change.data["to_fact_id"], "labels": selection}, user.id)
     m.audit(db, "IMPACT_ASSESSED", result.id, user.id)
     return result
@@ -424,11 +455,11 @@ def approve_revision(db, rev, user, approve=True, reason=""):
     m.audit(db, "REVISION_APPROVED" if approve else "REVISION_REJECTED", rev.id, user.id)
     return result or decision
 
-def release(db, rev, user):
-    role(user, "releaser")
-    existing = m.latest(db, m.Release, rev.id)
-    if existing:
-        return existing, None
+def release_gate(db, rev):
+    """Deterministic release-gate evaluation. Read-only: returns (blockers, artifact_bytes, approval, validation).
+
+    This is the single authority for release eligibility; release() and the AI agent both use it.
+    """
     errors = []
     if latest_revision(db, rev.key).id != rev.id:
         errors.append("A newer immutable label revision exists")
@@ -453,6 +484,18 @@ def release(db, rev, user):
     if approval and (approval.data["artifact_hash"] != rev.data["artifact_hash"] or approval.data["snapshot_hash"] != rev.data["snapshot_hash"]
                      or not validation or approval.data["validation_id"] != validation.id):
         errors.append("Approval does not bind to the exact artifact, dependencies and latest validation")
+    return errors, pdf, approval, validation
+
+def release_blockers(db, rev):
+    """Reasons this exact revision cannot be released right now (empty list = gate passes). Read-only."""
+    return release_gate(db, rev)[0]
+
+def release(db, rev, user):
+    role(user, "releaser")
+    existing = m.latest(db, m.Release, rev.id)
+    if existing:
+        return existing, None
+    errors, pdf, approval, validation = release_gate(db, rev)
     if errors:
         m.audit(db, "RELEASE_BLOCKED", rev.id, user.id, {"reasons": errors})
         return None, errors

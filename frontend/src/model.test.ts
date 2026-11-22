@@ -10,7 +10,7 @@ describe('Evidence workspace projections',()=>{
  it('shows reviewers only their current review-ready revisions',()=>{
   const ws={user:{id:'checker',name:'Checker',role:'reviewer'},revisions:[
    {id:'r1',is_latest:true,state:'Review Ready',actor:'jayashree'},
-   {id:'r2',is_latest:true,state:'Review Ready',actor:'jency'},
+   {id:'r2',is_latest:true,state:'Review Ready',actor:'checker'},
    {id:'r3',is_latest:false,state:'Review Ready',actor:'jayashree'},
    {id:'r4',is_latest:true,state:'Stale',actor:'jayashree'}
   ]} as unknown as Workspace;

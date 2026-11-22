@@ -118,6 +118,7 @@ Decision = table("review_decisions")
 Approval = table("approvals")
 Release = table("releases")
 Audit = table("audit_events")
+AgentRun = table("agent_runs")
 
 class Dependency(Base):
     __tablename__ = "field_dependencies"
@@ -128,7 +129,7 @@ class Dependency(Base):
     condition: Mapped[dict] = mapped_column(JSON, default=dict)
     __table_args__ = (UniqueConstraint("label_id", "field"),)
 
-IMMUTABLE = (Fact, Template, RuleSet, Revision, Validation, Decision, Approval, Release, Audit, Impact)
+IMMUTABLE = (Fact, Template, RuleSet, Revision, Validation, Decision, Approval, Release, Audit, Impact, AgentRun)
 for cls in IMMUTABLE:
     @event.listens_for(cls, "before_update")
     def prevent_update(mapper, connection, target):

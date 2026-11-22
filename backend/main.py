@@ -2,7 +2,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import Literal
-from fastapi import FastAPI, Depends, File, Form, Request, Response, UploadFile
+from fastapi import FastAPI, Depends, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, Response as BinaryResponse
 from pydantic import BaseModel, Field
 from urllib.parse import urlparse
@@ -10,6 +10,9 @@ from . import db as m, workflow as w
 from .auth import login, user_from_request
 from .seed import initialize
 from .storage import store, digest
+from .agent import orchestrator as ag
+from .agent.schemas import AgentRequest, LABEL_KEY
+from .agent.tools import KEY as FACT_KEY, ToolContext, execute_tool
 
 @asynccontextmanager
 async def lifespan(app):
@@ -217,3 +220,62 @@ def download(kind: str, id: str, ctx=Depends(context)):
     import re
     safe_name=re.sub(r'[^A-Za-z0-9._-]','_',name)[:180]
     return BinaryResponse(content,media_type=media,headers={"Content-Disposition":("inline" if kind=="preview" else "attachment")+f'; filename="{safe_name}"'})
+
+
+# ---- LabelTrace AI (read-only analysis agent). It never takes the global write gate while a model call is in flight.
+def agent_user(request: Request):
+    with m.transaction(write=False) as db:
+        user = user_from_request(db, request)
+        return {"id": user.id, "name": user.data["name"], "role": user.data["role"]}
+
+@app.get("/api/agent/status")
+def agent_status(request: Request):
+    agent_user(request)
+    configured = ag.agent_configured()
+    return {"configured": configured, "model": ag.settings()["model"] if configured else None,
+            "mode": "claude" if configured else "deterministic-only", "read_only": True}
+
+@app.get("/api/agent/report")
+def agent_report(request: Request, label_key: str | None = Query(default=None, pattern=LABEL_KEY)):
+    """Deterministic gate/validation/remediation report. Uses no LLM and works without an API key."""
+    return ag.deterministic_report(agent_user(request), [label_key] if label_key else None)
+
+@app.get("/api/agent/impact")
+def agent_impact(request: Request, fact_key: str = Query(pattern=FACT_KEY)):
+    """Hypothetical dependency/approval impact of a new version of a fact. Read-only, no LLM."""
+    result, ok, error = execute_tool(ToolContext(agent_user(request)), "analyze_change_impact", {"fact_key": fact_key})
+    if not ok:
+        return JSONResponse({"detail": result["error"]}, status_code=404)
+    return {"data": result["data"], "evidence": result["evidence"]}
+
+@app.post("/api/agent/query")
+def agent_query(body: AgentRequest, request: Request):
+    user = agent_user(request)
+    try:
+        client = ag.make_client()
+    except ag.AgentUnavailable as exc:
+        return JSONResponse({"detail": str(exc) + ". Deterministic reports remain available."}, status_code=503)
+    try:
+        ag.check_limits(user["id"])
+    except ag.RateLimited as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=429)
+    response, usage = ag.run_agent(user, body, client)
+    ag.persist_run(user, body, response, usage)
+    return response
+
+@app.get("/api/agent/runs")
+def agent_runs(request: Request):
+    user = agent_user(request)
+    from sqlalchemy import select
+    with m.transaction(write=False) as db:
+        runs = db.scalars(select(m.AgentRun).where(m.AgentRun.actor == user["id"]).order_by(m.AgentRun.created.desc()).limit(20))
+        return [{"run_id": r.key, "created": r.created, "question": r.data["question"], "mode": r.data["mode"], "release_status": r.data["release_status"]} for r in runs]
+
+@app.get("/api/agent/runs/{run_id}")
+def agent_run(run_id: str, request: Request):
+    user = agent_user(request)
+    with m.transaction(write=False) as db:
+        run = m.latest(db, m.AgentRun, run_id)
+        if not run or run.actor != user["id"]:
+            return JSONResponse({"detail": "Run not found"}, status_code=404)
+        return {**run.data["response"], "run_id": run.key}
