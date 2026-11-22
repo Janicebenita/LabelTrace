@@ -43,30 +43,86 @@ Refactors of existing logic (behaviour preserved; the original 47 tests pass unc
 | `POST /api/agent/query` | **yes** | Natural-language question → validated report (`503` if unconfigured, `429` if rate-limited) |
 | `GET /api/agent/runs[/{id}]` | no | The caller's own past runs |
 
-## Setup
-```bash
-pip install -r backend/requirements-lock.txt
-cp .env.example .env     # set AGENT_ENABLED=1 and ANTHROPIC_API_KEY, or export them
-python manage.py start   # existing launcher; open the "AI Intelligence" page
+## Local setup (test the real Anthropic integration first)
+
+The agent is **off by default**. It turns on only when both `AGENT_ENABLED=1` and `ANTHROPIC_API_KEY` are set on the server; a key alone does nothing.
+
+Windows PowerShell (from the repository root):
+```powershell
+git checkout main; git pull
+git checkout -b feature/labeltrace-ai-agent
+git am labeltrace-ai-agent.patch          # the new patch (3 commits)
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-lock.txt
+copy .env.example .env                      # then edit .env (see below); never commit .env
+.\.venv\Scripts\python.exe manage.py start
 ```
-The key is read only on the server and is never sent to the browser.
+macOS/Linux:
+```bash
+git checkout main && git pull && git checkout -b feature/labeltrace-ai-agent
+git am labeltrace-ai-agent.patch
+python3 -m venv .venv && .venv/bin/python -m pip install -r backend/requirements-lock.txt
+cp .env.example .env                        # then edit .env; never commit .env
+.venv/bin/python manage.py start
+```
+Open http://127.0.0.1:5173, sign in with a demo role, open **AI Intelligence**. `manage.py` reads `.env` but real environment variables take precedence.
 
-## Vercel deployment (not performed here)
-1. In the Vercel project settings add encrypted environment variables: `ANTHROPIC_API_KEY`, `AGENT_ENABLED=1`, optionally `AGENT_MODEL` and the `AGENT_*` limits above. Never commit them.
-2. **Function duration:** the agent timeout defaults to 40 s. Confirm your plan's function limit covers it (the repo's own notes cite 60 s for non-Fluid Hobby functions); if the platform default is lower, raise `maxDuration` for `backend/main.py` in `vercel.json` or lower `AGENT_TIMEOUT_SECONDS`. This was not tested on Vercel.
-3. **Database:** startup calls `create_all`, which adds the missing `agent_runs` table to an existing database without touching other tables. Verified on SQLite only; for PostgreSQL either let startup create it or run `python manage.py migrate`. Back up first. `agent_runs` uses the same schema shape as the other evidence tables.
-4. **Cost/abuse:** the hosted demo shows shared demo credentials. Keep the per-user and daily limits low, or leave `AGENT_ENABLED` unset to keep the deterministic panels only.
-5. Redeploy, then verify (below). Do not point tests at production data.
+Run the checks:
+```bash
+python -m pytest -q                                   # backend
+cd frontend && npm ci && npm test && npm run build    # frontend tests, typecheck, production build
+```
 
-### Post-deploy verification checklist
-- `GET /api/health` is `ok`; sign in as a demo role.
-- `GET /api/agent/status` → `configured: true`; the AI page shows "Claude · <model>".
-- Ask "Can adult.box be released now?" → the status pill equals the Releases page gate; every cited `E#` opens in the Evidence Explorer.
-- Check the timeline lists only tool calls; confirm no workflow record changed (revisions, approvals, releases).
-- Temporarily unset the key → chat shows the 503 message while the Release Intelligence panel still works.
+### Environment variables (server-side only; none are sent to the browser)
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `AGENT_ENABLED` | `0` / unset | Must be `1` to enable chat |
+| `ANTHROPIC_API_KEY` | unset | Required with `AGENT_ENABLED=1`. Use a key with a spend limit |
+| `AGENT_MODEL` | `claude-sonnet-5-5` | Model id |
+| `AGENT_TIMEOUT_SECONDS` | `40` | Whole-request deadline. Must stay at least 10 s below the function `maxDuration` (60) |
+| `AGENT_MAX_STEPS` / `AGENT_MAX_TOOL_CALLS` / `AGENT_MAX_TOKENS` | `6` / `12` / `2500` | Loop and output caps |
+| `AGENT_USER_LIMIT_PER_10_MIN` / `AGENT_DAILY_LIMIT` | `10` / `200` | Counted from stored runs; lower these on any public deployment |
+
+## Database and migration behavior
+
+The only schema change is one new table, `agent_runs` (append-only). No existing table is altered.
+
+- **Local, via `manage.py start`/`migrate`:** runs `alembic upgrade head` first, so a database already at `0001` gets `0002` and keeps all data (tested on SQLite with seeded data). A fresh database gets both.
+- **App started before migrating:** the app's startup `create_all` may create `agent_runs` first. Migration `0002` detects this and treats it as applied (fixed and tested in this branch; earlier it failed with "table already exists").
+- **Database created only by `create_all`** (no `alembic_version` table, for example uvicorn started directly): `alembic upgrade head` fails at `0001` because those tables exist. This is pre-existing behavior and is not tested here. Back up `data/`, then use `manage.py reset` for a disposable demo database, or `python -m alembic stamp head`.
+- **Vercel/PostgreSQL:** Alembic is not run. Each cold start runs `initialize()`, which calls `create_all` under a PostgreSQL advisory lock and creates only the missing `agent_runs` table. This is additive, but it does mean **the first deployment that boots against a database changes that database**. That includes a Preview deployment if its `DATABASE_URL` points at the production database. Not tested on PostgreSQL.
+- **Rollback:** older code ignores the extra table. Dropping `agent_runs` is optional and affects nothing else.
+- Stored runs contain the question and the full response (synthetic data only here).
+
+## Vercel configuration
+
+`vercel.json` now has `"maxDuration": 60` on the existing `backend/main.py` entry under the `api` service. Every other setting is unchanged (a test compares against the previous version). Per Vercel's duration documentation (last updated 2026-08-24): the function entry for a Python framework app is keyed on its resolved entrypoint file, which is `backend/main.py` here; with Fluid compute (on by default) Hobby defaults to and is capped at 300 s; Vercel's Hobby-60-seconds announcement means 60 s is also within the limit without Fluid. So 60 is valid on Hobby either way. I could not see your project's plan or Fluid setting; confirm with `vercel inspect <deployment-url> --json` and read the function `timeout`.
+
+## Preview deployment (do this before any production deployment)
+
+Production is not deployed by this change. In the Vercel project:
+1. **Isolate the data.** Check which environments `DATABASE_URL` / `POSTGRES_URL` and the Blob token apply to. If Preview uses the production database, either point Preview at a separate database (for example a Neon branch, if your plan allows) or back up first.
+2. Add `ANTHROPIC_API_KEY`, `AGENT_ENABLED=1`, and low limits (`AGENT_USER_LIMIT_PER_10_MIN=5`, `AGENT_DAILY_LIMIT=30`) for the **Preview** environment only. Leave Production without `AGENT_ENABLED`.
+3. From the repo root run `vercel` (no `--prod`) and open the preview URL. Preview deployments may be behind Vercel's deployment protection, so you may need to be signed in to Vercel.
+
+### Preview test checklist
+- [ ] `GET /api/health` is `ok`; sign in as each demo role.
+- [ ] `vercel inspect <preview-url> --json` shows function `timeout` of 60.
+- [ ] `GET /api/agent/status` reports `configured: true`; the AI page header shows "Claude · <model>".
+- [ ] Ask "Can adult.box be released now?": the answer's status pill equals the Releases page gate, and every cited `E#` opens in the Evidence Explorer.
+- [ ] **Safety boundaries:** before and after several questions, the counts of revisions, approvals, validations and releases are unchanged; no new workflow state appears (only `AGENT_QUERY` audit events).
+- [ ] Ask it to "release adult.box" and to "mark it READY": the status still comes from the gate and nothing is released.
+- [ ] Make a real change (approved fact update) and re-ask: the previously approved label shows BLOCKED with the stale reason, matching the Releases page.
+- [ ] Ask a what-if question: the impact graph and answer agree (adult affected, pediatric unaffected for the adult address).
+- [ ] Rate limit: exceed `AGENT_USER_LIMIT_PER_10_MIN` and see the 429 message.
+- [ ] Remove `ANTHROPIC_API_KEY`: chat shows the not-configured message while the Release Intelligence panel still works.
+- [ ] A slow or failed model call produces a labelled deterministic fallback, not an error page; the request finishes inside 60 s.
+- [ ] Check Vercel function logs and the Anthropic usage page: no secrets logged; usage matches what you asked.
+- [ ] Open the page on mobile width and in dark mode (not yet checked by anyone).
+Only after all items pass, consider enabling it in Production.
 
 ## Verification status
-See the implementation report: backend 87 tests, frontend 7 tests, `tsc` and the production build were run locally on SQLite. **Not verified:** any real Anthropic API call (tests use a scripted fake client), PostgreSQL behaviour, Vercel deployment, browser rendering/accessibility of the new page, behaviour under real-model variability.
+See the implementation report: backend 95 tests, frontend 7 tests, `tsc` and the production build were run locally on SQLite. **Not verified:** any real Anthropic API call (tests use a scripted fake client), PostgreSQL behaviour, Vercel deployment, browser rendering/accessibility of the new page, behaviour under real-model variability.
 
 ## Known limitations
 Synthetic data only; four seeded labels; QR/text checks are rendered-data consistency (no print quality, no UDI); approval "invalidation" is derived by the freshness check, not a stored event; the hypothetical impact tool does not evaluate a proposed value beyond reporting it; the prompt-injection filter is heuristic defence in depth (the real protection is that the tools are read-only and status is server-derived); no per-organisation tenancy or SSO.
