@@ -2,7 +2,7 @@
 
 ### Traceable change control for medical-device labels
 
-![LabelTrace hero banner: source evidence flows through affected variants, validated artwork, human approval, and a controlled release gate](docs/images/labeltrace-hero.svg)
+![LabelTrace hero banner: source evidence flows through affected variants, validated artwork, human approval, and a controlled release gate](docs/images/labeltrace-hero.png)
 
 > **Every edit has a source. Every release has proof.**
 
@@ -70,7 +70,7 @@ For local synthetic data, the sign-in screen shows the demo password. The local 
 
 ## 🏗️ Application architecture
 
-![LabelTrace architecture: React and TypeScript call the FastAPI control plane, which enforces workflow permissions and connects to versioned relational storage, private artifact storage, and optional advisory AI adapters](docs/images/labeltrace-architecture.svg)
+![LabelTrace architecture: React and TypeScript call the FastAPI control plane, which enforces workflow permissions and connects to versioned relational storage, private artifact storage, and optional advisory AI adapters](docs/images/labeltrace-architecture.png)
 
 The browser is the workflow interface; **FastAPI remains the authority** for permissions, evidence freshness, approval, and release. The optional AI path is advisory and cannot update authoritative label fields.
 
@@ -236,7 +236,7 @@ frontend/src/            React/TypeScript workspace and API client
 migrations/              Alembic database migrations
 fixtures/                Synthetic source documents and independent expected outcomes
 docs/                    API, architecture, demo, Azure, regulatory, verification notes
-docs/images/             README hero banner and full-stack architecture SVGs
+docs/images/             README hero and architecture visuals (PNG embeds + SVG sources)
 infra/                   Azure deployment templates and CI workflow
 artifacts/               Sample labels, evidence exports, reports, and genuine screenshots
 manage.py                Direct local start, init, reset, migrate, and test commands
