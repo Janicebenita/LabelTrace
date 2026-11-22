@@ -2,9 +2,7 @@
 
 ### Traceable change control for medical-device labels
 
-<p align="center">
-  <img src="docs/images/labeltrace-hero.svg" alt="LabelTrace: source evidence flows through affected variants, validated artwork, human approval, and a controlled release gate" width="100%" />
-</p>
+![LabelTrace hero banner: source evidence flows through affected variants, validated artwork, human approval, and a controlled release gate](docs/images/labeltrace-hero.svg)
 
 > **Every edit has a source. Every release has proof.**
 
@@ -72,9 +70,7 @@ For local synthetic data, the sign-in screen shows the demo password. The local 
 
 ## 🏗️ Application architecture
 
-<p align="center">
-  <img src="docs/images/labeltrace-architecture.svg" alt="LabelTrace architecture: React and TypeScript call the FastAPI control plane, which enforces workflow permissions and connects to versioned relational storage, private artifact storage, and optional advisory AI adapters" width="100%" />
-</p>
+![LabelTrace architecture: React and TypeScript call the FastAPI control plane, which enforces workflow permissions and connects to versioned relational storage, private artifact storage, and optional advisory AI adapters](docs/images/labeltrace-architecture.svg)
 
 The browser is the workflow interface; **FastAPI remains the authority** for permissions, evidence freshness, approval, and release. The optional AI path is advisory and cannot update authoritative label fields.
 
