@@ -8,12 +8,12 @@ LabelTrace AI answers questions such as "Why is this label blocked?", "What happ
 
 | Rule | Enforcement |
 | --- | --- |
-| The agent cannot change anything | Tool set contains no write operations; each tool runs in a read-only transaction; unknown/mutating tool names are refused (tested). |
+| The agent cannot change anything | Tool set contains no write operations; every tool and every agent read runs in a **database-level read-only transaction** (`SET TRANSACTION READ ONLY` on PostgreSQL, `PRAGMA query_only` on SQLite), so even a buggy tool cannot write (tested on SQLite locally and PostgreSQL in CI); unknown/mutating tool names are refused (tested). Saving the run record is the only agent write and uses the normal write path, outside any tool. |
 | Only the deterministic gate decides release eligibility | `workflow.release_gate()` is the single implementation used by both `release()` and the agent. `release_status` is derived server-side from gate results; the model has no field to set it. |
 | Gate unavailable ⇒ never READY | If the gate cannot be evaluated the status is `UNKNOWN`. |
 | No fabricated evidence | The model may cite only evidence ids (E1, E2…) returned by tools in that run. Unknown ids are removed, and 12+ hex identifiers in its prose that no tool returned are replaced with `[unverified-id]`. A finding labelled *deterministic* with no valid evidence is downgraded to *AI advisory*. |
 | Untrusted data | Tool output is clipped; instruction-like text in data fields is flagged to the model and in the response limitations. |
-| Bounded execution | Max steps, max tool calls, wall-clock timeout, token cap, per-user and daily rate limits (counted from persisted runs). |
+| Bounded execution | Max steps, max tool calls, a wall-clock deadline (clamped to 45 s), no SDK retries, per-call time budgets, an output-token cap, a cumulative input-token budget, and per-user and daily limits enforced by an atomic reservation (see *Cost controls*). |
 | Failure ⇒ deterministic fallback | API errors, timeouts, malformed or missing reports produce a clearly labelled deterministic report; no model text is invented. |
 | Auditability | Each query is stored in the append-only `agent_runs` table and an `AGENT_QUERY` audit event is written. |
 
@@ -79,7 +79,8 @@ cd frontend && npm ci && npm test && npm run build    # frontend tests, typechec
 | `AGENT_ENABLED` | `0` / unset | Must be `1` to enable chat |
 | `ANTHROPIC_API_KEY` | unset | Required with `AGENT_ENABLED=1`. Use a key with a spend limit |
 | `AGENT_MODEL` | `claude-sonnet-5-5` | Model id |
-| `AGENT_TIMEOUT_SECONDS` | `40` | Whole-request deadline. Must stay at least 10 s below the function `maxDuration` (60) |
+| `AGENT_TIMEOUT_SECONDS` | `40` | Whole-request deadline, clamped to 5–45 s so it always ends inside the 60 s function limit |
+| `AGENT_MAX_INPUT_TOKENS` | `60000` | Cumulative input-token budget per request (billed tokens so far + a pessimistic estimate of the next request) |
 | `AGENT_MAX_STEPS` / `AGENT_MAX_TOOL_CALLS` / `AGENT_MAX_TOKENS` | `6` / `12` / `2500` | Loop and output caps |
 | `AGENT_USER_LIMIT_PER_10_MIN` / `AGENT_DAILY_LIMIT` | `10` / `200` | Counted from stored runs; lower these on any public deployment |
 
@@ -123,6 +124,13 @@ Only after all items pass, consider enabling it in Production.
 
 ## Verification status
 See the implementation report: backend 95 tests, frontend 7 tests, `tsc` and the production build were run locally on SQLite. **Not verified:** any real Anthropic API call (tests use a scripted fake client), PostgreSQL behaviour, Vercel deployment, browser rendering/accessibility of the new page, behaviour under real-model variability.
+
+## Cost controls and time budget
+
+- **Time:** the SDK client uses `max_retries=0`. Before each model call the agent keeps 8 s in reserve for the fallback report and saving the run, gives the call `connect 5 s + read ≤ min(25 s, remaining − 13 s)`, and stops (deterministic fallback) when that does not fit. A run therefore finishes in roughly 35 s or less even when the model is slow, well inside the 60 s function limit.
+- **Tokens:** output is capped by `AGENT_MAX_TOKENS × AGENT_MAX_STEPS`; input by `AGENT_MAX_INPUT_TOKENS`, checked *before* every call. Worst case per request is therefore about 60 000 input + 15 000 output tokens. With the default daily limit of 200 requests that is a hard ceiling per deployment database, not an estimate of typical cost (typical runs use far less).
+- **Limits are reserved, not just counted:** `reserve_run` checks the per-user (10 per 10 min) and daily (200 per 24 h) limits and inserts a *reservation* row in `agent_runs` in one transaction that holds the database write gate, *before* the paid call. Concurrent requests, even on different Vercel instances sharing the same PostgreSQL database, are serialized by that lock, so they cannot all pass the check. A reservation counts whether the run later succeeds, fails, or cannot be saved. Completion adds version 2 of the same run and an `AGENT_QUERY` audit event. If saving fails the answer is still returned, with a limitation note, and the reservation still counts and is logged.
+- **Not covered:** limits are per database, not per Anthropic account. Two deployments (for example Preview with its own database and a local run) each have their own counters, and rate limits do not stop a leaked key. Always set a monthly spend limit on the key in the Anthropic Console and use a separate key for Preview. The reservation briefly holds the same write gate as release actions (milliseconds). A reserved run whose server was killed mid-request stays counted and shows as `reserved` in the run list; there is no automatic cleanup or refund.
 
 ## Known limitations
 Synthetic data only; four seeded labels; QR/text checks are rendered-data consistency (no print quality, no UDI); approval "invalidation" is derived by the freshness check, not a stored event; the hypothetical impact tool does not evaluate a proposed value beyond reporting it; the prompt-injection filter is heuristic defence in depth (the real protection is that the tools are read-only and status is server-derived); no per-organisation tenancy or SSO.

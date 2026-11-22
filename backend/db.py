@@ -155,6 +155,32 @@ def transaction(write=True):
     finally:
         db.close()
 
+@contextmanager
+def read_only_transaction():
+    """Session whose DATABASE transaction is read-only (used by every AI-agent read).
+
+    PostgreSQL: SET TRANSACTION READ ONLY as the first statement, so any INSERT/UPDATE/DELETE/DDL raises.
+    SQLite: PRAGMA query_only=ON on this connection, switched off again before the connection is reused.
+    Nothing is ever committed. This does not take the global write gate.
+    """
+    db = Session()
+    sqlite = engine.dialect.name == "sqlite"
+    try:
+        db.execute(text("PRAGMA query_only=ON" if sqlite else "SET TRANSACTION READ ONLY"))
+        yield db
+    finally:
+        try:
+            db.rollback()
+            if sqlite:
+                db.execute(text("PRAGMA query_only=OFF"))
+                db.rollback()
+        except Exception:
+            try:
+                db.connection().invalidate()  # never return a possibly query_only connection to the pool
+            except Exception:
+                pass
+        db.close()
+
 def latest(db, cls, key):
     return db.scalars(select(cls).where(cls.key == key).order_by(cls.version.desc())).first()
 

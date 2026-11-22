@@ -224,7 +224,7 @@ def download(kind: str, id: str, ctx=Depends(context)):
 
 # ---- LabelTrace AI (read-only analysis agent). It never takes the global write gate while a model call is in flight.
 def agent_user(request: Request):
-    with m.transaction(write=False) as db:
+    with m.read_only_transaction() as db:
         user = user_from_request(db, request)
         return {"id": user.id, "name": user.data["name"], "role": user.data["role"]}
 
@@ -256,26 +256,36 @@ def agent_query(body: AgentRequest, request: Request):
     except ag.AgentUnavailable as exc:
         return JSONResponse({"detail": str(exc) + ". Deterministic reports remain available."}, status_code=503)
     try:
-        ag.check_limits(user["id"])
+        run_id = ag.reserve_run(user, body)  # atomic limit check + counted reservation, before any paid call
     except ag.RateLimited as exc:
         return JSONResponse({"detail": str(exc)}, status_code=429)
-    response, usage = ag.run_agent(user, body, client)
-    ag.persist_run(user, body, response, usage)
+    try:
+        response, usage = ag.run_agent(user, body, client)
+    except Exception as exc:
+        ag.fail_run(run_id, user, body, type(exc).__name__)
+        return JSONResponse({"detail": "The AI analysis failed unexpectedly. Deterministic reports remain available."}, status_code=500)
+    ag.complete_run(run_id, user, body, response, usage)
     return response
 
 @app.get("/api/agent/runs")
 def agent_runs(request: Request):
     user = agent_user(request)
     from sqlalchemy import select
-    with m.transaction(write=False) as db:
-        runs = db.scalars(select(m.AgentRun).where(m.AgentRun.actor == user["id"]).order_by(m.AgentRun.created.desc()).limit(20))
-        return [{"run_id": r.key, "created": r.created, "question": r.data["question"], "mode": r.data["mode"], "release_status": r.data["release_status"]} for r in runs]
+    with m.read_only_transaction() as db:
+        latest_by_key = {}
+        for r in db.scalars(select(m.AgentRun).where(m.AgentRun.actor == user["id"]).order_by(m.AgentRun.created.desc()).limit(80)):
+            latest_by_key.setdefault(r.key, r)  # newest version of each run (reservation -> completed)
+        return [{"run_id": r.key, "created": r.created, "question": r.data["question"], "mode": r.data.get("mode", "pending"),
+                 "release_status": r.data.get("release_status", "UNKNOWN"), "status": r.data.get("status", "completed")}
+                for r in list(latest_by_key.values())[:20]]
 
 @app.get("/api/agent/runs/{run_id}")
 def agent_run(run_id: str, request: Request):
     user = agent_user(request)
-    with m.transaction(write=False) as db:
+    with m.read_only_transaction() as db:
         run = m.latest(db, m.AgentRun, run_id)
         if not run or run.actor != user["id"]:
             return JSONResponse({"detail": "Run not found"}, status_code=404)
+        if "response" not in run.data:
+            return JSONResponse({"detail": f"Run has no completed response (status: {run.data.get('status', 'unknown')})"}, status_code=404)
         return {**run.data["response"], "run_id": run.key}

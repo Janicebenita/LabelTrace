@@ -384,7 +384,7 @@ def execute_tool(ctx, name, raw_args):
         return {"ok": False, "error": "Invalid arguments: " + clip(detail, 300)}, False, "invalid arguments"
     ctx.current, ctx.tool = [], name
     try:
-        with m.transaction(write=False) as db:
+        with m.read_only_transaction() as db:
             data = spec.fn(db, ctx, args)
     except ToolError as exc:
         return {"ok": False, "error": str(exc)}, False, str(exc)

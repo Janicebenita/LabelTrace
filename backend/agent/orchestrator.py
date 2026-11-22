@@ -7,6 +7,7 @@ Authority boundaries enforced here (not by prompt wording):
  * the tool set is read-only, so a manipulated model cannot change any record.
 """
 import json
+import logging
 import os
 import time
 import uuid
@@ -22,6 +23,15 @@ from .tools import REGISTRY, ToolContext, execute_tool
 from .evidence import clip
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
+log = logging.getLogger("labeltrace.agent")
+# Time budget (seconds). The Vercel function limit is 60 s; the agent deadline is clamped to MAX_DEADLINE so that
+# model calls, tool runs and persistence always finish inside it.
+MAX_DEADLINE = 45.0
+RESERVE = 8.0        # always kept free for the deterministic fallback and saving the run
+CONNECT_TIMEOUT = 5.0
+CALL_CAP = 25.0      # longest read wait for a single model call
+MIN_CALL = 5.0       # do not start a model call with less read time than this
+CHARS_PER_TOKEN = 3  # deliberately pessimistic (real text is closer to 3.5-4 chars per token)
 STANDARD_LIMITATIONS = [
     "Synthetic demonstration prototype: not FDA certification, not UDI, not a 21 CFR 801 compliance assessment.",
     "Release eligibility is decided only by the deterministic release gate; this analysis is advisory and does not replace human review.",
@@ -35,8 +45,9 @@ class RateLimited(Exception):
 
 def settings():
     return {"model": os.getenv("AGENT_MODEL", DEFAULT_MODEL), "max_steps": int(os.getenv("AGENT_MAX_STEPS", "6")),
-            "max_tool_calls": int(os.getenv("AGENT_MAX_TOOL_CALLS", "12")), "timeout": float(os.getenv("AGENT_TIMEOUT_SECONDS", "40")),
-            "max_tokens": int(os.getenv("AGENT_MAX_TOKENS", "2500"))}
+            "max_tool_calls": int(os.getenv("AGENT_MAX_TOOL_CALLS", "12")), "timeout": min(max(float(os.getenv("AGENT_TIMEOUT_SECONDS", "40")), 5.0), MAX_DEADLINE),
+            "max_tokens": int(os.getenv("AGENT_MAX_TOKENS", "2500")),
+            "max_input_tokens": int(os.getenv("AGENT_MAX_INPUT_TOKENS", "60000"))}
 
 def agent_configured():
     return os.getenv("AGENT_ENABLED") == "1" and bool(os.getenv("ANTHROPIC_API_KEY"))
@@ -44,7 +55,8 @@ def agent_configured():
 def make_client():
     if not agent_configured():
         raise AgentUnavailable("AI agent is not configured: set AGENT_ENABLED=1 and ANTHROPIC_API_KEY on the server")
-    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=30.0, max_retries=1)
+    # max_retries=0: an SDK retry would silently double the wall time. Time is budgeted per call in run_agent.
+    return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"], timeout=anthropic.Timeout(CALL_CAP, connect=CONNECT_TIMEOUT), max_retries=0)
 
 def _inline(schema):
     defs = schema.get("$defs", {})
@@ -70,6 +82,11 @@ SYSTEM = """You are LabelTrace AI, a read-only analysis assistant for a syntheti
 5. Be concise and precise. State limitations honestly: this is a synthetic prototype, not FDA certification, UDI, or a 21 CFR 801 compliance assessment.
 6. If the question is ambiguous (for example, manufacturer address exists per product), analyze every matching fact key and say so.
 7. Use few tool calls; prefer get_release_gate_status, get_validation_results and generate_remediation_plan for release questions, analyze_change_impact for what-if questions, get_approval_history and get_audit_events for history questions."""
+
+def estimate_input_tokens(messages):
+    """Pessimistic size of the next model request (system prompt + tool definitions + conversation)."""
+    chars = len(SYSTEM) + len(json.dumps(TOOL_DEFS)) + len(json.dumps(messages, default=str))
+    return chars // CHARS_PER_TOKEN + 1
 
 def aggregate(gates):
     states = [g["status"] for g in gates.values()]
@@ -197,12 +214,16 @@ def run_agent(user, req: AgentRequest, client=None):
     submission, reason, nudged, repaired, calls = None, None, False, False, 0
     try:
         for _ in range(cfg["max_steps"]):
-            remaining = deadline - time.monotonic()
-            if remaining < 3:
+            budget = deadline - time.monotonic() - RESERVE
+            if budget < CONNECT_TIMEOUT + MIN_CALL:
                 reason = "time limit reached"
                 break
+            if usage["input_tokens"] + estimate_input_tokens(messages) > cfg["max_input_tokens"]:
+                reason = "input token budget reached"
+                break
+            read_wait = min(budget - CONNECT_TIMEOUT, CALL_CAP)  # connect + read wait <= budget, so the call cannot pass the deadline
             resp = client.messages.create(model=cfg["model"], max_tokens=cfg["max_tokens"], system=SYSTEM, tools=TOOL_DEFS,
-                                          messages=messages, timeout=min(remaining, 30.0))
+                                          messages=messages, timeout=anthropic.Timeout(read_wait, connect=CONNECT_TIMEOUT))
             u = getattr(resp, "usage", None)
             usage["input_tokens"] += getattr(u, "input_tokens", 0) or 0
             usage["output_tokens"] += getattr(u, "output_tokens", 0) or 0
@@ -251,24 +272,51 @@ def run_agent(user, req: AgentRequest, client=None):
         return finalize(submission, ctx, activity, cfg["model"]), usage
     return deterministic_report(user, req.label_key and [req.label_key], reason or "no report produced", activity, ctx), usage
 
-# ------------------------------------------------------------ limits and persistence
-def check_limits(user_id):
+# ------------------------------------------------------------ limits, reservation and persistence
+# Cost control design: a run is RESERVED (a version-1 row in append-only agent_runs) inside the database write
+# gate *before* any paid model call. The limit check and the insert happen in one transaction that holds the
+# global gate (BEGIN IMMEDIATE on SQLite, SELECT ... FOR UPDATE on PostgreSQL), so concurrent requests, even on
+# different serverless instances sharing one database, cannot all pass the check. The reservation is counted
+# whether the run later succeeds, fails or cannot be saved. Completion adds version 2 to the same run id.
+def reserve_run(user, req):
     per_user = int(os.getenv("AGENT_USER_LIMIT_PER_10_MIN", "10"))
     daily = int(os.getenv("AGENT_DAILY_LIMIT", "200"))
     now = datetime.now(timezone.utc)
-    with m.transaction(write=False) as db:
-        count = lambda *where: db.scalar(select(func.count()).select_from(m.AgentRun).where(*where))
-        if count(m.AgentRun.actor == user_id, m.AgentRun.created >= (now - timedelta(minutes=10)).isoformat()) >= per_user:
+    run_id = uuid.uuid4().hex
+    with m.transaction() as db:
+        count = lambda *where: db.scalar(select(func.count()).select_from(m.AgentRun).where(m.AgentRun.version == 1, *where))
+        if count(m.AgentRun.actor == user["id"], m.AgentRun.created >= (now - timedelta(minutes=10)).isoformat()) >= per_user:
             raise RateLimited("Too many AI requests. Please wait a few minutes.")
         if count(m.AgentRun.created >= (now - timedelta(hours=24)).isoformat()) >= daily:
             raise RateLimited("The daily AI request budget for this deployment has been reached.")
-
-def persist_run(user, req, response, usage):
-    run_id = uuid.uuid4().hex
-    data = {"question": req.question, "label_key": req.label_key, "mode": response.mode, "model": response.model,
-            "release_status": response.release_status, "usage": usage, "response": response.model_dump()}
-    with m.transaction() as db:
-        m.add(db, m.AgentRun, run_id, data, user["id"])
-        m.audit(db, "AGENT_QUERY", run_id, user["id"], {"mode": response.mode, "tools": [a.tool for a in response.tool_activity], "release_status": response.release_status})
-    response.run_id = run_id
+        m.add(db, m.AgentRun, run_id, {"question": req.question, "label_key": req.label_key, "status": "reserved", "mode": "pending",
+                                       "model": None, "release_status": "UNKNOWN", "usage": {}}, user["id"])
     return run_id
+
+def _finish(run_id, user, data, audit_details):
+    last = None
+    for _ in range(2):  # one retry for a transient database error
+        try:
+            with m.transaction() as db:
+                m.add(db, m.AgentRun, run_id, data, user["id"])
+                m.audit(db, "AGENT_QUERY", run_id, user["id"], audit_details)
+            return True
+        except Exception as exc:
+            last = exc
+    log.error("agent run %s could not be saved (%s); usage=%s", run_id, type(last).__name__, data.get("usage"))
+    return False
+
+def complete_run(run_id, user, req, response, usage):
+    data = {"question": req.question, "label_key": req.label_key, "status": "completed", "mode": response.mode, "model": response.model,
+            "release_status": response.release_status, "usage": usage, "response": response.model_dump()}
+    response.run_id = run_id
+    saved = _finish(run_id, user, data, {"mode": response.mode, "tools": [a.tool for a in response.tool_activity], "release_status": response.release_status})
+    if not saved:
+        # The answer is still returned; the reservation row already records the query and counts toward the limits.
+        response.limitations.append("The completed run record could not be saved. The request is still counted toward usage limits.")
+    return saved
+
+def fail_run(run_id, user, req, error_type):
+    data = {"question": req.question, "label_key": req.label_key, "status": "failed", "mode": "failed", "model": None,
+            "release_status": "UNKNOWN", "usage": {}, "error": error_type}
+    return _finish(run_id, user, data, {"mode": "failed", "error": error_type})
