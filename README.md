@@ -1,4 +1,4 @@
-# LabelTrace
+# LabelTrace — Traceable Change-Control & Automated Release-Gate Engine for Medical Device Labels
 
 ### Traceable change control for medical-device labels
 
