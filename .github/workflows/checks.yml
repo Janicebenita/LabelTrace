@@ -23,7 +23,11 @@ jobs:
         image: postgres:17.5-alpine
         env: {POSTGRES_DB: labeltrace, POSTGRES_USER: labeltrace, POSTGRES_PASSWORD: ci-only-not-production}
         ports: ['5432:5432']
-        options: --health-cmd 'pg_isready -U labeltrace' --health-interval 5s --health-retries 10
+        options: >-
+          --health-cmd="pg_isready -U labeltrace"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
       DATABASE_URL: postgresql+psycopg://labeltrace:ci-only-not-production@127.0.0.1:5432/labeltrace
       APP_ENV: test
