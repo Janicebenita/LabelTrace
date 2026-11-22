@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowRight,Bot,ListChecks,Lock,Network,Search,Send,ShieldCheck,TriangleAlert,Workflow} from 'lucide-react';
 import {api,newest,Row,short,Workspace} from './model';
+import {CHAT_DISABLED_NOTICE,RULE_BADGE,RULE_BUTTONS,RULE_NOTICE,RuleKind,describeImpact,ruleQuestion,uniqueActions} from './rules';
 import './agent.css';
 
 export type Gate={label_key:string;status:string;blockers:string[];pending_human_actions:string[];workflow_state?:string|null;released:boolean;revision_id?:string|null};
@@ -10,7 +11,7 @@ export type Activity={step:number;tool:string;args:Record<string,unknown>;ok:boo
 export type PlanStep={id:string;title:string;role:string;workflow_page:string;reason:string;evidence_ids:string[];status:string};
 export type Plan={label_key:string;gate_status:string;steps:PlanStep[];artifacts_to_regenerate?:boolean;validations_to_repeat?:boolean;approvals_to_renew?:boolean;already_released?:boolean};
 export type Report={request_id:string;run_id?:string|null;mode:'claude'|'deterministic';model?:string|null;summary:string;release_status:string;label_statuses:Gate[];affected_variants:string[];findings:Finding[];evidence:Evidence[];recommended_actions:string[];limitations:string[];human_review_required:boolean;tool_activity:Activity[];plans:Plan[]};
-type Turn={q:string;res?:Report;err?:string};
+type Turn={q:string;res?:Report;err?:string;rule?:RuleKind;impact?:any};
 
 export const statusClass=(s:string)=>s==='READY'?'ready':s==='BLOCKED'?'blocked':s==='REVIEW REQUIRED'?'review':'unknown';
 export const CLASS_LABEL:Record<string,string>={deterministic:'Deterministic',ai_advisory:'AI advisory',insufficient_evidence:'Insufficient evidence',human_review:'Human review'};
@@ -19,7 +20,7 @@ const clip=(v:unknown,n=48)=>{const t=typeof v==='string'?v:JSON.stringify(v);re
 
 export function ImpactGraph({data}:{data:any}){
   const rows:any[]=data.downstream,h=Math.max(200,rows.length*78+16),mid=h/2;
-  return <svg className="ai-graph" viewBox={`0 0 760 ${h}`} role="img" aria-label={`Dependency graph: ${data.fact_key} feeds ${rows.filter(r=>r.status!=='Unaffected').length} of ${rows.length} label variants`}>
+  return <div className="ai-graph-scroll" tabIndex={0} role="group" aria-label="Dependency graph, scrollable"><svg className="ai-graph" viewBox={`0 0 760 ${h}`} role="img" aria-label={`Dependency graph: ${data.fact_key} feeds ${rows.filter(r=>r.status!=='Unaffected').length} of ${rows.length} label variants`}>
     <g><rect className="node fact" x="8" y={mid-38} width="230" height="76" rx="12"/><text x="22" y={mid-12} className="t-sm">APPROVED FACT</text><text x="22" y={mid+8} className="t-b">{clip(data.fact_key,26)}</text><text x="22" y={mid+27} className="t-sm">{clip(data.current_value,30)}</text></g>
     {rows.map((r,i)=>{const y=8+i*78,on=r.status==='Affected',na=r.status==='Needs assessment';
       return <g key={r.label_key}>
@@ -29,7 +30,7 @@ export function ImpactGraph({data}:{data:any}){
         <text x="514" y={y+40} className="t-sm">{r.status}{r.would_become_stale?' · approval would go stale':''}</text>
         <text x="514" y={y+56} className="t-sm">{r.state?`now: ${r.state}`:'no revision'}{r.current_gate_status?` · gate ${r.current_gate_status}`:''}</text>
       </g>})}
-  </svg>;
+  </svg></div>;
 }
 
 export default function AgentWorkspace({ws,go}:{ws:Workspace;go:(page:string)=>void}){
@@ -72,6 +73,17 @@ export default function AgentWorkspace({ws,go}:{ws:Workspace;go:(page:string)=>v
     catch(e:any){setTurns(t=>t.map((x,i)=>i===t.length-1?{...x,err:e.message}:x))}
     finally{setAsking(false)}
   }
+  async function runRule(kind:RuleKind){
+    if(asking)return;
+    setAsking(true);setError('');
+    const q=ruleQuestion(kind,labelKey,factKey);
+    setTurns(t=>[...t,{q,rule:kind}]);
+    try{
+      if(kind==='impact'){const r=await api('/agent/impact?fact_key='+encodeURIComponent(factKey));setTurns(t=>t.map((x,i)=>i===t.length-1?{...x,impact:r.data}:x))}
+      else{const res:Report=await api('/agent/report'+(labelKey?`?label_key=${encodeURIComponent(labelKey)}`:''));setTurns(t=>t.map((x,i)=>i===t.length-1?{...x,res}:x))}
+    }catch(e:any){setTurns(t=>t.map((x,i)=>i===t.length-1?{...x,err:e.message}:x))}
+    finally{setAsking(false)}
+  }
   const openEvidence=(id:string)=>{setSelected(id);setKind('all');explorer.current?.scrollIntoView({behavior:'smooth',block:'start'})};
   const evidence=(shown?.evidence||[]).filter(e=>kind==='all'||e.kind===kind);
   const kinds=[...new Set((shown?.evidence||[]).map(e=>e.kind))];
@@ -89,23 +101,33 @@ export default function AgentWorkspace({ws,go}:{ws:Workspace;go:(page:string)=>v
       <section className="card ai-chat" aria-label="AI Command Center">
         <div className="card-head"><div><h2><Search size={17}/> AI Command Center</h2><p>Ask about {scope==='a label'?'labels':scope}, validation failures, impact and release readiness.</p></div></div>
         <div className="ai-suggest">{suggestions.map(s=><button key={s} disabled={asking||!status?.configured} onClick={()=>ask(s)}>{s}</button>)}</div>
-        {status&&!status.configured&&<p className="ai-note">Conversation needs <code>AGENT_ENABLED=1</code> and <code>ANTHROPIC_API_KEY</code> on the server. The release intelligence, impact graph and checklists on this page work without it.</p>}
+        {status&&!status.configured&&<p className="ai-note">{CHAT_DISABLED_NOTICE}</p>}
+        <div className="ai-rules" role="group" aria-label="Rule-based checks (no LLM)">
+          <span className="ai-rules-tag">{RULE_BADGE}</span>
+          {RULE_BUTTONS.map(b=><button key={b.kind} disabled={asking||(b.kind==='impact'&&!factKey)} onClick={()=>runRule(b.kind)}>{b.label}</button>)}
+        </div>
         <div className="ai-thread" aria-live="polite">
-          {turns.length===0&&<p className="ai-empty">No questions yet. Answers cite real records; every cited id opens in the Evidence Explorer.</p>}
+          {turns.length===0&&<p className="ai-empty">{status?.configured?'No questions yet. Answers cite real records; every cited id opens in the Evidence Explorer.':'Nothing run yet. Choose a rule-based check above; results cite real records and every cited id opens in the Evidence Explorer.'}</p>}
           {turns.map((t,i)=><div key={i} className="ai-turn">
             <div className="ai-q">{t.q}</div>
-            {!t.res&&!t.err&&<div className="ai-a ai-wait">Retrieving evidence with tools…</div>}
+            {!t.res&&!t.impact&&!t.err&&<div className="ai-a ai-wait">{t.rule?'Running rule-based check…':'Retrieving evidence with tools…'}</div>}
             {t.err&&<div className="ai-a ai-err"><TriangleAlert size={16}/> {t.err}</div>}
-            {t.res&&<div className="ai-a">
-              <div className="ai-meta"><span>Deterministic gate status</span><Pill s={t.res.release_status}/><span className="ai-mode">{t.res.mode==='claude'?`Claude · ${t.res.model}`:'Deterministic fallback'}</span></div>
+            {t.impact&&(()=>{const d=describeImpact(t.impact);return <div className="ai-a ai-rule-answer">
+              <div className="ai-meta"><span>Hypothetical change impact</span><span className="ai-mode rules">{RULE_BADGE}</span></div>
+              <p className="ai-summary">{d.summary}</p>
+              <ImpactGraph data={t.impact}/>
+              <p className="ai-hr"><ShieldCheck size={14}/> {RULE_NOTICE} Nothing was changed.</p>
+            </div>})()}
+            {t.res&&<div className={'ai-a'+(t.rule?' ai-rule-answer':'')}>
+              <div className="ai-meta"><span>Deterministic gate status</span><Pill s={t.res.release_status}/><span className={'ai-mode'+(t.rule?' rules':'')}>{t.rule?RULE_BADGE:t.res.mode==='claude'?`Claude · ${t.res.model}`:'Deterministic fallback'}</span></div>
               <p className="ai-summary">{t.res.summary}</p>
-              {t.res.findings.map(f=><div key={f.id} className={'ai-finding sev-'+f.severity}>
+              {t.rule!=='actions'&&t.res.findings.map(f=><div key={f.id} className={'ai-finding sev-'+f.severity}>
                 <div><b>{f.id}</b><span className="ai-sev">{f.severity}</span><span className={'ai-class '+f.classification}>{CLASS_LABEL[f.classification]}</span></div>
                 <p>{f.explanation}</p>{f.recommended_action&&<p className="ai-act"><ArrowRight size={13}/> {f.recommended_action}</p>}
                 <div className="ai-chips"><EvChips ids={f.evidence_ids}/>{f.evidence_ids.length===0&&<em>no verified evidence cited</em>}</div></div>)}
-              {t.res.recommended_actions.length>0&&<><h4>Recommended actions (advisory)</h4><ul>{t.res.recommended_actions.map((a,j)=><li key={j}>{a}</li>)}</ul></>}
+              {uniqueActions(t.res.recommended_actions).length>0&&<><h3>{t.rule?'Corrective actions (from the deterministic checklist)':'Recommended actions (advisory)'}</h3><ul>{uniqueActions(t.res.recommended_actions).map((a,j)=><li key={j}>{a}</li>)}</ul></>}
               <details><summary>Limitations</summary><ul>{t.res.limitations.map((a,j)=><li key={j}>{a}</li>)}</ul></details>
-              <p className="ai-hr"><ShieldCheck size={14}/> Human review required. This analysis is not release evidence.</p>
+              <p className="ai-hr"><ShieldCheck size={14}/> {t.rule?RULE_NOTICE+' Human review is still required.':'Human review required. This analysis is not release evidence.'}</p>
             </div>}
           </div>)}
         </div>
